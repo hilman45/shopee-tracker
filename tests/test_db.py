@@ -78,7 +78,9 @@ def test_update_product_stock_calls_correct_table():
     assert "last_checked" in update_call
 
 
-def test_update_product_stock_with_none_values():
+def test_update_product_stock_with_none_price_omits_supplier_price():
+    """When supplier_price_myr is None (scraper failed to parse price), the field
+    must be omitted from the payload so it never overwrites a previously good value."""
     with _mock_client() as mock_c:
         chain = mock_c.table.return_value
         chain.update.return_value.eq.return_value.execute.return_value = _table_response([])
@@ -86,7 +88,7 @@ def test_update_product_stock_with_none_values():
 
     update_call = chain.update.call_args[0][0]
     assert update_call["stock_qty"] is None
-    assert update_call["supplier_price_myr"] is None
+    assert "supplier_price_myr" not in update_call
 
 
 # ---------------------------------------------------------------------------
