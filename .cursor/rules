@@ -1,0 +1,124 @@
+# Shopee Supplier Stock Tracker — Cursor Rules
+
+## Project Summary
+This is a dropshipping inventory automation system for a Malaysia-based seller who:
+- Sources products from **Shopee Malaysia** (supplier prices in **MYR**)
+- Sells on **eBay** and **Etsy** (listed prices in **USD**)
+- Needs automated stock monitoring, margin tracking, and listing sync
+
+## Tech Stack
+- **Language**: Python 3.10+
+- **Database**: Supabase (PostgreSQL) — use the `supabase-py` client
+- **Scheduler**: cron job (via Railway or Render free tier)
+- **Alerts**: Telegram Bot API
+- **eBay**: eBay Inventory API (REST, OAuth 2.0)
+- **Etsy**: Etsy Open API v3 (REST, OAuth 2.0)
+- **FX Rate**: frankfurter.app (free, no key needed)
+- **Dashboard**: Google Looker Studio (connected to Supabase)
+
+## Project Structure
+```
+shopee-tracker/
+├── .cursor/rules
+├── docs/                  # Spec files — reference these when building
+│   ├── overview.md
+│   ├── schema.md
+│   ├── scraper.md
+│   ├── margin.md
+│   ├── ebay_sync.md
+│   ├── etsy_sync.md
+│   └── alerts.md
+├── src/
+│   ├── scraper.py         # Shopee stock watcher
+│   ├── margin.py          # FX fetch + margin calculator
+│   ├── alerts.py          # Telegram alert engine
+│   ├── ebay_sync.py       # eBay listing sync
+│   ├── etsy_sync.py       # Etsy listing sync
+│   ├── db.py              # Supabase client + queries
+│   └── main.py            # Entry point / scheduler
+├── config.py              # All config values and thresholds
+├── .env                   # Secrets (never commit this)
+├── requirements.txt
+└── README.md
+```
+
+## Coding Conventions
+- Use `python-dotenv` to load all secrets from `.env`
+- Never hardcode API keys, tokens, or credentials
+- All database queries go through `src/db.py` — no raw SQL elsewhere
+- Use `loguru` for logging (not print statements)
+- Every function must have a docstring
+- Handle all API errors with try/except and log the full error
+- Retry failed external calls up to 3 times with exponential backoff
+- Minimum 3-second delay between Shopee scrape requests
+
+## Environment Variables (in .env)
+```
+SUPABASE_URL=
+SUPABASE_KEY=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+EBAY_CLIENT_ID=
+EBAY_CLIENT_SECRET=
+EBAY_REFRESH_TOKEN=
+EBAY_SANDBOX=
+ETSY_CLIENT_ID=
+ETSY_REFRESH_TOKEN=
+ETSY_SHOP_ID=
+```
+
+## Key Business Rules
+- Supplier costs are in **MYR**, selling prices are in **USD**
+- Minimum acceptable net margin: **20%** (configurable in config.py)
+- FX rate is fetched every **6 hours** and stored in the `fx_rates` table
+- Stock is checked every **2 hours**
+- Low stock threshold: **10 units** (configurable in config.py)
+- Do not re-alert the same product for the same status until it recovers
+- Debounce margin alerts — max once per 6 hours per product
+- eBay fee rate: **13.25%** of selling price (configurable)
+- Etsy fee rate: **6.5% + $0.20** per transaction (configurable)
+
+## Margin Formula
+```python
+supplier_cost_usd = supplier_price_myr * myr_to_usd
+ebay_fee = selling_price_usd * 0.1325
+etsy_fee = (selling_price_usd * 0.065) + 0.20
+net_margin_usd = selling_price_usd - supplier_cost_usd - platform_fee
+margin_pct = (net_margin_usd / selling_price_usd) * 100
+```
+
+## When I ask you to build a feature, always:
+1. Reference the relevant `docs/` file for the full spec
+2. Write code to `src/` following the structure above
+3. Add any new config values to `config.py`
+4. Update `requirements.txt` if new packages are needed
+5. Never skip error handling or logging
+
+## Current Setup State
+
+### Completed fixes
+- `src/main.py` — `sys.path` bootstrap added at top so `python src/main.py --once` works from any directory
+- `.github/workflows/pipeline.yml` — `ETSY_ACCESS_TOKEN` removed from both `test` and `run-pipeline` jobs
+- `.env.example` — `ETSY_ACCESS_TOKEN` line removed
+- `requirements.txt` — `playwright` bumped to `1.49.0`, `supabase` bumped to `2.28.2`, `websockets==15.0.1` added
+- `websockets==15.0.1` installed — resolves `supabase 2.28.2` / `realtime` import crash
+- `python src/main.py --once` runs to completion (exit code 0); network errors are expected locally (no live credentials)
+- All 132 unit tests passing
+- `get_ebay_token.py` created — one-time OAuth helper script (can be deleted after use)
+- eBay OAuth fully working — `get_access_token()` confirmed returning live tokens
+- `EBAY_REFRESH_TOKEN` updated in `.env` with a valid production refresh token (expires ~18 months)
+- eBay RuName `Hilman_Rushdi-HilmanRu-Shopee-bvjuencpl` — auth accepted URL set to `https://httpbin.org/get` (used during token setup, can revert or leave)
+
+### Current blocker
+- None. All known blockers resolved.
+
+### Credentials status
+- Supabase, Telegram, eBay (Production) — all filled and verified working in `.env`
+- eBay OAuth token flow — confirmed working end-to-end
+- Etsy — dummy values (`dummy`) for now, skipped intentionally
+- `EBAY_SANDBOX=False` (production mode)
+
+### Next steps
+1. Add a test product to Supabase and verify `run_ebay_sync()` reads it and calls the eBay Inventory API
+2. Set up Etsy OAuth credentials when ready (same flow as eBay — use `get_ebay_token.py` as a reference)
+3. Deploy to Railway/Render and verify the cron pipeline runs end-to-end

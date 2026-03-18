@@ -1,0 +1,10 @@
+supabase==2.28.2
+requests==2.31.0
+beautifulsoup4==4.12.3
+playwright==1.49.0
+websockets==15.0.1
+loguru==0.7.2
+tenacity==8.2.3
+python-dotenv==1.0.1
+schedule==1.2.1
+pytest>=9.0

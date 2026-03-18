@@ -1,0 +1,84 @@
+name: Shopee Tracker Pipeline
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 */2 * * *"   # every 2 hours
+  workflow_dispatch:          # manual trigger from GitHub UI
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    env:
+      SUPABASE_URL: http://localhost
+      SUPABASE_KEY: dummy
+      TELEGRAM_BOT_TOKEN: dummy
+      TELEGRAM_CHAT_ID: dummy
+      EBAY_CLIENT_ID: dummy
+      EBAY_CLIENT_SECRET: dummy
+      EBAY_REFRESH_TOKEN: dummy
+      ETSY_CLIENT_ID: dummy
+      ETSY_REFRESH_TOKEN: dummy
+      ETSY_SHOP_ID: dummy
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
+  run-pipeline:
+    needs: test
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+      EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
+      EBAY_REFRESH_TOKEN: ${{ secrets.EBAY_REFRESH_TOKEN }}
+      ETSY_CLIENT_ID: ${{ secrets.ETSY_CLIENT_ID }}
+      ETSY_REFRESH_TOKEN: ${{ secrets.ETSY_REFRESH_TOKEN }}
+      ETSY_SHOP_ID: ${{ secrets.ETSY_SHOP_ID }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright browser
+        run: playwright install --with-deps chromium
+
+      - name: Run pipeline (once)
+        run: python src/main.py --once
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-logs-${{ github.run_id }}
+          path: logs/
+          retention-days: 7
